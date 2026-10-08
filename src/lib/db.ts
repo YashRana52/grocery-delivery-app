@@ -20,10 +20,12 @@ const connectDb = async () => {
       .then((conn) => conn.connection);
   }
   try {
-    const conn = await cached.promise;
-    return conn;
+    cached.conn = await cached.promise;
+    return cached.conn;
   } catch (error) {
-    console.log(error);
+    // failed promise cache me na rahe, warna har request hamesha fail hogi
+    cached.promise = null;
+    throw error;
   }
 };
 

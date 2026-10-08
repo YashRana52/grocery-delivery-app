@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import connectDb from "@/lib/db";
 import DeliveryAssignment from "@/models/deliveryAssignment.model";
 import Order from "@/models/order.model";
@@ -5,9 +6,16 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import emitEventHandler from "@/lib/emitEventHandler";
 
+const MAX_OTP_ATTEMPTS = 5;
+
 export async function POST(req: NextRequest) {
   try {
     await connectDb();
+
+    const session = await auth();
+    if (!session?.user?.id || session.user.role !== "deliveryBoy") {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
 
     const { orderId, otp } = await req.json();
 
@@ -25,6 +33,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ message: "Order not found" }, { status: 404 });
     }
 
+    if (String(order.assignedDeliveryBoy) !== session.user.id) {
+      return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
+
     //  Already verified?
     if (order.deliveryOtpVerification) {
       return NextResponse.json(
@@ -35,18 +47,28 @@ export async function POST(req: NextRequest) {
 
     //  Expiry check
     if (
+      !order.deliveryOtp ||
       !order.otpExpires ||
       new Date(order.otpExpires).getTime() < Date.now()
     ) {
       return NextResponse.json({ message: "OTP expired" }, { status: 400 });
     }
 
+    // 4 digit OTP brute force na ho
+    if ((order.otpAttempts || 0) >= MAX_OTP_ATTEMPTS) {
+      return NextResponse.json(
+        { message: "Too many wrong attempts, please resend OTP" },
+        { status: 429 },
+      );
+    }
+
     //  Compare hashed OTP
-    const cleanOtp = otp.trim();
+    const cleanOtp = String(otp).trim();
 
     const isMatch = await bcrypt.compare(cleanOtp, order.deliveryOtp);
 
     if (!isMatch) {
+      await Order.updateOne({ _id: order._id }, { $inc: { otpAttempts: 1 } });
       return NextResponse.json({ message: "Invalid OTP" }, { status: 400 });
     }
 
@@ -59,6 +81,7 @@ export async function POST(req: NextRequest) {
     //  clear OTP after use
     order.deliveryOtp = null;
     order.otpExpires = null;
+    order.otpAttempts = 0;
 
     await order.save();
 

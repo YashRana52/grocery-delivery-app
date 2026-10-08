@@ -18,26 +18,13 @@ export async function GET(
 
     const deliveryBoyId = session?.user?.id;
 
-    if (!deliveryBoyId) {
-      return NextResponse.json({ message: "unauthorized" }, { status: 400 });
+    if (!deliveryBoyId || session?.user?.role !== "deliveryBoy") {
+      return NextResponse.json({ message: "unauthorized" }, { status: 401 });
     }
 
-    const assignment = await DeliveryAssignment.findById(id);
-    if (!assignment) {
-      return NextResponse.json(
-        { message: "assignment not found" },
-        { status: 400 },
-      );
-    }
-    if (assignment.status !== "broadcasted") {
-      return NextResponse.json(
-        { message: "assignment expired" },
-        { status: 400 },
-      );
-    }
     const allreadyAssigned = await DeliveryAssignment.findOne({
       assignedTo: deliveryBoyId,
-      status: { $nin: ["broadcasted", "completed"] },
+      status: "assigned",
     });
 
     if (allreadyAssigned) {
@@ -47,11 +34,25 @@ export async function GET(
       );
     }
 
-    assignment.assignedTo = deliveryBoyId;
-    assignment.status = "assigned";
-    assignment.acceptedAt = new Date();
+    // atomic update: do delivery boy ek saath accept karein to sirf ek ko milega
+    const assignment = await DeliveryAssignment.findOneAndUpdate(
+      { _id: id, status: "broadcasted", broadcastedTo: deliveryBoyId },
+      {
+        $set: {
+          assignedTo: deliveryBoyId,
+          status: "assigned",
+          acceptedAt: new Date(),
+        },
+      },
+      { new: true },
+    );
 
-    await assignment.save();
+    if (!assignment) {
+      return NextResponse.json(
+        { message: "assignment expired or not available" },
+        { status: 400 },
+      );
+    }
 
     const order = await Order.findById(assignment.order);
 
@@ -63,7 +64,7 @@ export async function GET(
 
     await order.save();
 
-    await order.populate("assignedDeliveryBoy");
+    await order.populate("assignedDeliveryBoy", "-password");
 
     //socket for accept order
 

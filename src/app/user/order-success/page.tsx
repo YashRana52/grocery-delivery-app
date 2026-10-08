@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { clearCart } from "@/redux/cartSlice";
 import { useDispatch } from "react-redux";
 import axios from "axios";
 
-function OrderSuccess() {
+function OrderSuccessContent() {
   const router = useRouter();
   const params = useSearchParams();
   const dispatch = useDispatch();
@@ -181,6 +181,15 @@ function OrderSuccess() {
         </button>
       </motion.div>
     </div>
+  );
+}
+
+// useSearchParams ko Suspense boundary chahiye, warna next build fail hota hai
+function OrderSuccess() {
+  return (
+    <Suspense fallback={null}>
+      <OrderSuccessContent />
+    </Suspense>
   );
 }
 

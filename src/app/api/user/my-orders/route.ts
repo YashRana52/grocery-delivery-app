@@ -14,9 +14,9 @@ export async function GET(req: NextRequest) {
     }
 
     const orders = await Order.find({
-      user: session?.user?.id!,
+      user: session.user?.id,
     })
-      .populate("user assignedDeliveryBoy")
+      .populate("user assignedDeliveryBoy", "-password")
       .sort({ createdAt: -1 });
 
     return NextResponse.json(

@@ -1,42 +1,39 @@
+import { auth } from "@/auth";
+import { buildOrderItems, validateAddress } from "@/lib/buildOrder";
 import connectDb from "@/lib/db";
 import emitEventHandler from "@/lib/emitEventHandler";
 import Order from "@/models/order.model";
-import User from "@/models/user.model";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   try {
     await connectDb();
 
-    const { userId, items, paymentMethod, totalAmount, address } =
-      await req.json();
+    const session = await auth();
+    if (!session?.user?.id || session.user.role !== "user") {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
 
-    if (
-      !userId ||
-      !items ||
-      items.length === 0 ||
-      !paymentMethod ||
-      !totalAmount ||
-      !address
-    ) {
+    const { items, address } = await req.json();
+
+    // price aur total client se nahi, DB se calculate hote hain
+    let orderItems, totalAmount, cleanAddress;
+    try {
+      ({ orderItems, totalAmount } = await buildOrderItems(items));
+      cleanAddress = validateAddress(address);
+    } catch (validationError: any) {
       return NextResponse.json(
-        { message: "Please send all required fields" },
+        { message: validationError.message },
         { status: 400 },
       );
     }
 
-    const user = await User.findById(userId);
-
-    if (!user) {
-      return NextResponse.json({ message: "User not found" }, { status: 404 });
-    }
-
     const newOrder = await Order.create({
-      user: userId,
-      items,
-      paymentMethod,
+      user: session.user.id,
+      items: orderItems,
+      paymentMethod: "cod",
       totalAmount,
-      address,
+      address: cleanAddress,
     });
     //socket io implement
     await emitEventHandler("new-order", newOrder);

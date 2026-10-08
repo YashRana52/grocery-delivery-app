@@ -2,10 +2,10 @@
 
 import axios from "axios";
 import React, { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, Package, Pencil, Search, Upload, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { IGrocery } from "@/models/grocery.model";
+import type { IGrocery } from "@/models/grocery.model";
 import Image from "next/image";
 import { toast } from "sonner";
 
@@ -175,12 +175,18 @@ function ViewGrocery() {
             className="group bg-gray-800/40 backdrop-blur-xl border border-gray-700 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition"
           >
             <div className="relative h-44 w-full overflow-hidden">
-              <Image
-                src={g.image || "/placeholder-grocery.jpg"}
-                alt={g.name}
-                fill
-                className="object-cover group-hover:scale-110 transition duration-500"
-              />
+              {g.image ? (
+                <Image
+                  src={g.image}
+                  alt={g.name}
+                  fill
+                  className="object-cover group-hover:scale-110 transition duration-500"
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-500 text-sm">
+                  No image
+                </div>
+              )}
             </div>
             <div className="p-4 space-y-3">
               <div>

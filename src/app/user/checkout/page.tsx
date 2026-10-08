@@ -19,19 +19,14 @@ import { useSelector } from "react-redux";
 import { RootState } from "@/redux/store";
 import { useEffect, useState } from "react";
 
-import "leaflet/dist/leaflet.css";
-import { OpenStreetMapProvider } from "leaflet-geosearch";
-
-import { MapContainer, Marker, TileLayer, useMap } from "react-leaflet";
-import L, { LatLngExpression } from "leaflet";
 import axios from "axios";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-const markerIcon = new L.Icon({
-  iconUrl: "https://cdn-icons-png.flaticon.com/128/684/684908.png",
-  iconSize: [40, 40],
-  iconAnchor: [20, 40],
+// leaflet window ke bina import nahi hota, isliye SSR off
+const CheckoutMap = dynamic(() => import("@/components/CheckoutMap"), {
+  ssr: false,
 });
 
 function CheckOut() {
@@ -73,13 +68,23 @@ function CheckOut() {
   }, []);
 
   const handleSearchQuery = async () => {
-    setSearchLoading(true);
-    const provider = new OpenStreetMapProvider();
+    if (!searchQuery.trim()) return;
+    try {
+      setSearchLoading(true);
+      const { OpenStreetMapProvider } = await import("leaflet-geosearch");
+      const provider = new OpenStreetMapProvider();
 
-    const results = await provider.search({ query: searchQuery });
-    if (results) {
-      setSearchLoading(false);
+      const results = await provider.search({ query: searchQuery });
+      if (results.length === 0) {
+        toast.error("Location not found");
+        return;
+      }
       setPosition([results[0].y, results[0].x]);
+    } catch (error) {
+      console.log(error);
+      toast.error("Failed to search location");
+    } finally {
+      setSearchLoading(false);
     }
   };
 
@@ -109,15 +114,16 @@ function CheckOut() {
           },
         );
 
+        const addr = res.data.address || {};
+        // chhote shehar/gaon me "city" field nahi hota
         setAddress((prev) => ({
           ...prev,
-          city: res.data.address.city,
-          state: res.data.address.state,
-          pincode: res.data.address.postcode,
-          fullAddress: res.data.display_name,
+          city:
+            addr.city || addr.town || addr.village || addr.county || prev.city,
+          state: addr.state || prev.state,
+          pincode: addr.postcode || prev.pincode,
+          fullAddress: res.data.display_name || prev.fullAddress,
         }));
-
-        console.log(res.data);
       } catch (error) {
         console.log(error);
       }
@@ -126,42 +132,53 @@ function CheckOut() {
     fetchAddress();
   }, [position]);
 
+  // order ka payload; price/total server khud DB se calculate karta hai
+  const buildOrderPayload = () => {
+    if (cartData.length === 0) {
+      toast.error("Your cart is empty");
+      return null;
+    }
+    if (!position) {
+      toast.error("Please select your delivery location on the map");
+      return null;
+    }
+    const missing = Object.values(address).some((v) => !String(v).trim());
+    if (missing) {
+      toast.error("Please fill all address fields");
+      return null;
+    }
+    if (!/^[0-9]{10}$/.test(address.mobile.trim())) {
+      toast.error("Please enter a valid 10 digit mobile number");
+      return null;
+    }
+    return {
+      items: cartData.map((item) => ({
+        grocery: item._id,
+        quantity: item.quantity,
+      })),
+      address: {
+        ...address,
+        latitude: position[0],
+        longitude: position[1],
+      },
+    };
+  };
+
   // cod method
 
   const handleCod = async () => {
-    if (!position) return null;
+    const payload = buildOrderPayload();
+    if (!payload) return;
     try {
       setOrderLoading(true);
 
-      const res = await axios.post("/api/user/order", {
-        userId: userData?.user._id,
-        items: cartData.map((item) => ({
-          grocery: item._id,
-          name: item.name,
-          price: item.price,
-          unit: item.unit,
-          quantity: item.quantity,
-          image: item.image,
-        })),
-        totalAmount: finalTotal,
-        address: {
-          fullName: address.fullName,
-          mobile: address.mobile,
-          city: address.city,
-          state: address.state,
-          pincode: address.pincode,
-          fullAddress: address.fullAddress,
-          latitude: position[0],
-          longitude: position[1],
-        },
-        paymentMethod,
-      });
+      await axios.post("/api/user/order", payload);
 
-      setOrderLoading(false);
       router.push("/user/order-success?method=cod");
-    } catch (error) {
+    } catch (error: any) {
       console.log(error);
-      toast.error("failed to placed order");
+      toast.error(error.response?.data?.message || "Failed to place order");
+    } finally {
       setOrderLoading(false);
     }
   };
@@ -169,36 +186,15 @@ function CheckOut() {
   //  handleOnlinePayment
 
   const handleOnlinePayment = async () => {
-    if (!position) return null;
+    const payload = buildOrderPayload();
+    if (!payload) return;
     try {
       setOrderLoading(true);
-      const result = await axios.post("/api/user/payment", {
-        userId: userData?.user._id,
-        items: cartData.map((item) => ({
-          grocery: item._id,
-          name: item.name,
-          price: item.price,
-          unit: item.unit,
-          quantity: item.quantity,
-          image: item.image,
-        })),
-        totalAmount: finalTotal,
-        address: {
-          fullName: address.fullName,
-          mobile: address.mobile,
-          city: address.city,
-          state: address.state,
-          pincode: address.pincode,
-          fullAddress: address.fullAddress,
-          latitude: position[0],
-          longitude: position[1],
-        },
-        paymentMethod,
-      });
-      setOrderLoading(false);
+      const result = await axios.post("/api/user/payment", payload);
       window.location.href = result.data.url;
-    } catch (error) {
+    } catch (error: any) {
       console.log(error);
+      toast.error(error.response?.data?.message || "Payment failed to start");
       setOrderLoading(false);
     }
   };
@@ -217,27 +213,6 @@ function CheckOut() {
         { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
       );
     }
-  };
-
-  const DraggablbeMarker: React.FC = () => {
-    const map = useMap();
-    useEffect(() => {
-      map.setView(position as LatLngExpression, 15, { animate: true });
-    }, [position, map]);
-    return (
-      <Marker
-        icon={markerIcon}
-        position={position as LatLngExpression}
-        draggable={true}
-        eventHandlers={{
-          dragend: (e: L.LeafletEvent) => {
-            const marker = e.target as L.Marker;
-            const { lat, lng } = marker.getLatLng();
-            setPosition([lat, lng]);
-          },
-        }}
-      />
-    );
   };
 
   return (
@@ -396,6 +371,7 @@ function CheckOut() {
 
                 <button
                   onClick={handleSearchQuery}
+                  disabled={searchLoading}
                   className="bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 rounded-lg text-sm font-medium transition"
                 >
                   {searchLoading ? (
@@ -407,18 +383,10 @@ function CheckOut() {
               </div>
               <div className="relative mt-6 h-[330px] rounded-xl overflow-hidden  shadow-inner border-white/10">
                 {position && (
-                  <MapContainer
-                    center={position as LatLngExpression}
-                    zoom={13}
-                    scrollWheelZoom={true}
-                    className="w-full h-[300px] rounded-xl overflow-hidden"
-                  >
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    <DraggablbeMarker />
-                  </MapContainer>
+                  <CheckoutMap
+                    position={position}
+                    onPositionChange={setPosition}
+                  />
                 )}
                 <motion.button
                   onClick={handleCurrentLocation}

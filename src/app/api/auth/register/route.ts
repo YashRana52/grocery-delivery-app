@@ -7,7 +7,13 @@ export async function POST(req: NextRequest) {
   try {
     await connectDb();
 
-    const { name, email, password } = await req.json();
+    const body = await req.json();
+    const name = String(body.name || "").trim();
+    // schema email lowercase me save karta hai, isliye check bhi lowercase me
+    const email = String(body.email || "")
+      .trim()
+      .toLowerCase();
+    const password = String(body.password || "");
 
     if (!name || !email || !password) {
       return NextResponse.json(
@@ -34,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await User.create({
+    await User.create({
       name,
       email,
       password: hashedPassword,
@@ -44,10 +50,18 @@ export async function POST(req: NextRequest) {
       { message: "User created successfully" },
       { status: 201 },
     );
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
+    // DB se connect hi na ho to user ko saaf message dikhe
+    const dbDown =
+      error?.code === "ENOTFOUND" ||
+      error?.name === "MongooseServerSelectionError";
     return NextResponse.json(
-      { message: "Internal Server Error" },
+      {
+        message: dbDown
+          ? "Database se connect nahi ho pa raha, baad me try karein"
+          : "Internal Server Error",
+      },
       { status: 500 },
     );
   }

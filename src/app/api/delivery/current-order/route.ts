@@ -2,24 +2,24 @@ import { auth } from "@/auth";
 import connectDb from "@/lib/db";
 import DeliveryAssignment from "@/models/deliveryAssignment.model";
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     await connectDb();
 
     const session = await auth();
 
     const deliveryBoyId = session?.user?.id;
+    if (!deliveryBoyId || session?.user?.role !== "deliveryBoy") {
+      return NextResponse.json({ message: "unauthorized" }, { status: 401 });
+    }
 
     const activeAssignment = await DeliveryAssignment.findOne({
       assignedTo: deliveryBoyId,
       status: "assigned",
     })
-      .populate({
-        path: "order",
-        populate: { path: "address" },
-      })
+      .populate("order")
       .lean();
 
     if (!activeAssignment) {

@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 import axios from "axios";
 import { ArrowLeft, Send, Sparkle } from "lucide-react";
 import Link from "next/link";
-import Livemap from "@/components/Livemap";
 import dynamic from "next/dynamic";
 import { getSocket } from "@/lib/socket";
 import { Theme } from "emoji-picker-react";
@@ -15,6 +14,11 @@ import { RootState } from "@/redux/store";
 import DeliveredSuccess from "@/components/DeliveredSuccess";
 
 const EmojiPicker = dynamic(() => import("emoji-picker-react"), {
+  ssr: false,
+});
+
+// leaflet server pe import nahi ho sakta
+const Livemap = dynamic(() => import("@/components/Livemap"), {
   ssr: false,
 });
 
@@ -33,7 +37,7 @@ function TrackOrder() {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [messages, setMessages] = useState<IMessage[]>([]);
 
@@ -45,10 +49,11 @@ function TrackOrder() {
     latitude: 0,
     longitude: 0,
   });
-  const [deliveryBoyLocation, setDeliveryBoyLocation] = useState({
-    latitude: 0,
-    longitude: 0,
-  });
+  // location aane tak null, warna map (0,0) pe marker dikhata hai
+  const [deliveryBoyLocation, setDeliveryBoyLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   useEffect(() => {
     const getAllMessages = async () => {
@@ -81,7 +86,8 @@ function TrackOrder() {
           longitude: data.address.longitude,
         });
 
-        if (data.assignedDeliveryBoy?.location?.coordinates) {
+        const coords = data.assignedDeliveryBoy?.location?.coordinates;
+        if (coords && (coords[0] !== 0 || coords[1] !== 0)) {
           setDeliveryBoyLocation({
             latitude: data.assignedDeliveryBoy.location.coordinates[1],
             longitude: data.assignedDeliveryBoy.location.coordinates[0],
@@ -95,17 +101,39 @@ function TrackOrder() {
     getOrder();
   }, [orderId]);
 
-  useEffect((): any => {
-    const socket = getSocket();
-    socket.on("update-deliveryBoy-location", (data) => {
-      setDeliveryBoyLocation({
-        latitude: data.location.coordinates[1] ?? data.location.latitude,
-        longitude: data.location.coordinates[0] ?? data.location.longitude,
-      });
-    });
+  const assignedBoyId = order?.assignedDeliveryBoy?._id?.toString();
 
-    return () => socket.off("update-deliveryBoy-location");
-  }, [order]);
+  useEffect(() => {
+    if (!assignedBoyId) return;
+    const socket = getSocket();
+    const handleLocation = (data: any) => {
+      // sirf is order ke delivery boy ki location lo
+      if (String(data.userId) !== assignedBoyId) return;
+      setDeliveryBoyLocation({
+        latitude: data.location.coordinates[1],
+        longitude: data.location.coordinates[0],
+      });
+    };
+    socket.on("update-deliveryBoy-location", handleLocation);
+
+    return () => {
+      socket.off("update-deliveryBoy-location", handleLocation);
+    };
+  }, [assignedBoyId]);
+
+  // deliver hote hi page success view dikhaye
+  useEffect(() => {
+    if (!orderId) return;
+    const socket = getSocket();
+    const handleStatus = (data: { orderId: string; status: string }) => {
+      if (String(data.orderId) !== orderId) return;
+      setOrder((prev: any) => (prev ? { ...prev, status: data.status } : prev));
+    };
+    socket.on("order-status-update", handleStatus);
+    return () => {
+      socket.off("order-status-update", handleStatus);
+    };
+  }, [orderId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -130,26 +158,34 @@ function TrackOrder() {
 
     const socket = getSocket();
 
-    socket.emit("join-room", orderId);
+    const joinRoom = () => socket.emit("join-room", orderId);
+    joinRoom();
+    // reconnect ke baad room dobara join karna padta hai
+    socket.on("connect", joinRoom);
 
-    socket.on("receive-message", (msg: IMessage) => {
+    const handleMessage = (msg: IMessage) => {
+      // pehle join kiye gaye dusre order ke messages ignore karo
+      if (msg.roomId !== orderId) return;
       setMessages((prev) => [...prev, msg]);
-    });
+    };
+    socket.on("receive-message", handleMessage);
 
     return () => {
-      socket.off("receive-message");
+      socket.off("connect", joinRoom);
+      socket.off("receive-message", handleMessage);
     };
   }, [orderId]);
 
   const sendMsg = () => {
-    if (!newMessage.trim()) return;
+    const senderId = userData?.user?._id;
+    if (!newMessage.trim() || !senderId) return;
 
     const socket = getSocket();
 
     const message: IMessage = {
       roomId: orderId,
       text: newMessage,
-      senderId: userData?.user._id!,
+      senderId,
       time: new Date().toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
@@ -185,9 +221,7 @@ function TrackOrder() {
         role: "user",
       });
       setLoading(false);
-      setSuggestions(res.data.suggestions);
-
-      console.log("suggestions:", suggestions);
+      setSuggestions(res.data.suggestions || []);
     } catch (error) {
       console.log(error);
       setLoading(false);
@@ -234,10 +268,12 @@ function TrackOrder() {
           <>
             {/* MAP */}
             <div className="rounded-3xl overflow-hidden border border-white/10 shadow-xl">
-              <Livemap
-                userLocation={userLocation}
-                deliveryBoyLocation={deliveryBoyLocation}
-              />
+              {order && (
+                <Livemap
+                  userLocation={userLocation}
+                  deliveryBoyLocation={deliveryBoyLocation}
+                />
+              )}
             </div>
             {/* chat component */}
             <div className="h-[460px] flex flex-col rounded-3xl bg-gradient-to-br from-neutral-900 via-neutral-800 to-black border border-white/10 shadow-2xl backdrop-blur-xl">

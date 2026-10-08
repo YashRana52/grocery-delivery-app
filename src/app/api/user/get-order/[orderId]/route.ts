@@ -1,5 +1,8 @@
+import { auth } from "@/auth";
 import connectDb from "@/lib/db";
+import { canAccessOrder } from "@/lib/orderAccess";
 import Order from "@/models/order.model";
+import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(
@@ -9,20 +12,26 @@ export async function GET(
   try {
     await connectDb();
 
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
     const { orderId } = await params;
 
-    console.log("orderId", orderId);
-
-    if (!orderId) {
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return NextResponse.json(
         { message: "Invalid order id" },
         { status: 400 },
       );
     }
 
-    const order = await Order.findById(orderId).populate("assignedDeliveryBoy");
+    const order = await Order.findById(orderId).populate(
+      "assignedDeliveryBoy",
+      "-password",
+    );
 
-    if (!order) {
+    if (!order || !canAccessOrder(session, order)) {
       return NextResponse.json({ message: "order not found" }, { status: 404 });
     }
 

@@ -48,7 +48,7 @@ function Nav({ user }: { user: IUser }) {
 
     if (!searchQuery.trim()) return;
 
-    router.push(`?search=${searchQuery}`);
+    router.push(`/?search=${encodeURIComponent(searchQuery.trim())}`);
 
     setSearchOpen(false);
     setSearchQuery("");
@@ -76,7 +76,7 @@ function Nav({ user }: { user: IUser }) {
     if (!searchQuery.trim()) return;
 
     const delay = setTimeout(() => {
-      router.push(`?search=${searchQuery}`);
+      router.push(`/?search=${encodeURIComponent(searchQuery.trim())}`);
     }, 500);
 
     return () => clearTimeout(delay);
@@ -376,7 +376,7 @@ function Nav({ user }: { user: IUser }) {
                   <div className="mt-3 flex flex-col gap-1">
                     {user.role == "user" && (
                       <Link
-                        href="user/my-orders"
+                        href="/user/my-orders"
                         onClick={() => setOpen(false)}
                         className="flex items-center gap-3
                       px-3 py-2 rounded-lg

@@ -22,18 +22,26 @@ export async function POST(req: NextRequest) {
     const unit = formData.get("unit") as string;
     const price = formData.get("price") as string;
 
-    const file = formData.get("image") as Blob | null;
+    const file = formData.get("image");
 
-    if (!name || !category || !unit || !price) {
+    if (!groceryId || !name || !category || !unit || !price) {
       return NextResponse.json(
         { message: "All fields are required" },
         { status: 400 },
       );
     }
 
-    let imageUrl = "";
+    if (isNaN(Number(price)) || Number(price) <= 0) {
+      return NextResponse.json(
+        { message: "Price must be a positive number" },
+        { status: 400 },
+      );
+    }
 
-    if (file) {
+    const update: Record<string, string> = { name, category, unit, price };
+
+    // nayi image aayi ho tabhi replace karo, warna purani image rehne do
+    if (file instanceof Blob && file.size > 0) {
       const uploaded = await uploadOnCloudinary(file);
 
       if (!uploaded) {
@@ -43,21 +51,28 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      imageUrl = uploaded;
+      update.image = uploaded;
     }
 
-    const grocery = await Grocery.findByIdAndUpdate(groceryId, {
-      name,
-      category,
-      unit,
-      price,
-      image: imageUrl,
+    const grocery = await Grocery.findByIdAndUpdate(groceryId, update, {
+      new: true,
+      runValidators: true,
     });
 
-    return NextResponse.json({ grocery }, { status: 201 });
+    if (!grocery) {
+      return NextResponse.json(
+        { message: "Grocery not found" },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({ grocery }, { status: 200 });
   } catch (error) {
     console.log(error);
 
-    return NextResponse.json({ message: "Add grocery error" }, { status: 500 });
+    return NextResponse.json(
+      { message: "Edit grocery error" },
+      { status: 500 },
+    );
   }
 }

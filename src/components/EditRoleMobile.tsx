@@ -5,6 +5,9 @@ import { Bike, User, UserCog, Check } from "lucide-react";
 import { motion } from "motion/react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { useDispatch } from "react-redux";
+import { AppDispatch } from "@/redux/store";
+import { setUserData } from "@/redux/userSlice";
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -16,6 +19,7 @@ function EditRoleMobile() {
     { id: "deliveryBoy", label: "Delivery Partner", icon: Bike },
   ]);
   const router = useRouter();
+  const dispatch = useDispatch<AppDispatch>();
   const { update } = useSession();
   const [selectedRole, setSelectedRole] = useState("");
   const [mobile, setMobile] = useState("");
@@ -29,14 +33,19 @@ function EditRoleMobile() {
         role: selectedRole,
         mobile,
       });
-      await update({ role: selectedRole });
+      // server DB se role padh ke token update karta hai
+      await update({ refresh: true });
+      dispatch(setUserData({ user: res.data }));
 
       toast.success("Role and mobile updated");
 
       router.push("/");
-    } catch (error) {
+      router.refresh();
+    } catch (error: any) {
       console.log(error);
-      toast.error("Failed to update role and mobile");
+      toast.error(
+        error.response?.data?.message || "Failed to update role and mobile",
+      );
     }
   };
 

@@ -1,3 +1,4 @@
+import { auth } from "@/auth";
 import connectDb from "@/lib/db";
 import emitEventHandler from "@/lib/emitEventHandler";
 import DeliveryAssignment from "@/models/deliveryAssignment.model";
@@ -12,13 +13,33 @@ export async function POST(
   try {
     await connectDb();
 
+    const session = await auth();
+    if (session?.user?.role !== "admin") {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
+    }
+
     const { orderId } = await params;
     const { status } = await req.json();
 
-    const order = await Order.findById(orderId).populate("user");
+    if (!["pending", "out of delivery"].includes(status)) {
+      return NextResponse.json({ message: "Invalid status" }, { status: 400 });
+    }
+
+    const order = await Order.findById(orderId);
 
     if (!order) {
       return NextResponse.json({ message: "Order not found" }, { status: 404 });
+    }
+
+    // status sirf aage badh sakta hai (pending -> out of delivery)
+    if (
+      order.status === "delivered" ||
+      (order.status === "out of delivery" && status === "pending")
+    ) {
+      return NextResponse.json(
+        { message: `Cannot change status from ${order.status} to ${status}` },
+        { status: 400 },
+      );
     }
 
     order.status = status;
@@ -59,18 +80,12 @@ export async function POST(
 
       const candidates = availableDeliveryBoys.map((b) => b._id);
 
+      // koi delivery boy nahi mila to order pending hi rehne do,
+      // warna wo "out of delivery" me bina rider ke atak jayega
       if (candidates.length === 0) {
-        await order.save();
-
-        //socket for status update
-        await emitEventHandler("order-status-update", {
-          orderId: order._id,
-          status: order.status,
-        });
-
         return NextResponse.json(
-          { message: "No available delivery boys" },
-          { status: 200 },
+          { success: false, message: "No available delivery boys nearby" },
+          { status: 409 },
         );
       }
 
@@ -84,8 +99,7 @@ export async function POST(
       await deliveryAssignment.populate("order");
 
       //socket for delivery boy notification
-      for (const boyId of candidates) {
-        const boy = await User.findById(boyId);
+      for (const boy of availableDeliveryBoys) {
         if (boy.socketId) {
           await emitEventHandler(
             "new-assignment",
@@ -108,12 +122,9 @@ export async function POST(
         latitude: b.location.coordinates[1],
         longitude: b.location.coordinates[0],
       }));
-
-      await deliveryAssignment.populate("order");
     }
 
     await order.save();
-    await order.populate("user");
     //socket for status update
     await emitEventHandler("order-status-update", {
       orderId: order._id,

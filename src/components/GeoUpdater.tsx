@@ -3,13 +3,25 @@ import { getSocket } from "@/lib/socket";
 import { useEffect } from "react";
 
 function GeoUpdater({ userId }: { userId: string }) {
-  let socket = getSocket();
+  // identity har (re)connect par bhejo, warna socketId purana reh jata hai
+  useEffect(() => {
+    if (!userId) return;
+    const socket = getSocket();
 
-  socket.emit("identity", userId);
+    const sendIdentity = () => socket.emit("identity", userId);
+
+    if (socket.connected) sendIdentity();
+    socket.on("connect", sendIdentity);
+
+    return () => {
+      socket.off("connect", sendIdentity);
+    };
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
     if (!navigator.geolocation) return;
+    const socket = getSocket();
     let lastUpdate = 0;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {

@@ -1,26 +1,23 @@
 import { auth } from "@/auth";
 import connectDb from "@/lib/db";
 import DeliveryAssignment from "@/models/deliveryAssignment.model";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     await connectDb();
 
     const session = await auth();
+    if (!session?.user?.id || session.user.role !== "deliveryBoy") {
+      return NextResponse.json({ message: "unauthorized" }, { status: 401 });
+    }
 
     const assignments = await DeliveryAssignment.find({
-      broadcastedTo: session?.user?.id,
+      broadcastedTo: session.user.id,
       status: "broadcasted",
     }).populate("order");
 
-    if (assignments.length === 0) {
-      return NextResponse.json(
-        { message: "no assignment found" },
-        { status: 404 },
-      );
-    }
-
+    // khali list error nahi hai
     return NextResponse.json({ assignments }, { status: 200 });
   } catch (error) {
     console.log(error);

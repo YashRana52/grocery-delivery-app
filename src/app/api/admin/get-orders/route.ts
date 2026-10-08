@@ -1,12 +1,19 @@
+import { auth } from "@/auth";
 import connectDb from "@/lib/db";
 import Order from "@/models/order.model";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     await connectDb();
+
+    const session = await auth();
+    if (session?.user?.role !== "admin") {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 403 });
+    }
+
     const orders = await Order.find({})
-      .populate("user assignedDeliveryBoy")
+      .populate("user assignedDeliveryBoy", "-password")
       .sort({ createdAt: -1 });
     return NextResponse.json(
       { orders },

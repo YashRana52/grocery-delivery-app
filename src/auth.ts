@@ -12,21 +12,28 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         email: { label: "email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials, request) {
+      async authorize(credentials) {
         await connectDb();
 
-        const email = credentials.email;
-        const password = credentials.password as string;
+        const email = String(credentials?.email || "")
+          .trim()
+          .toLowerCase();
+        const password = String(credentials?.password || "");
+
+        if (!email || !password) {
+          return null;
+        }
 
         const user = await User.findOne({ email });
-        if (!user) {
-          throw new Error("user does not exist");
+        // google se bane user ke paas password nahi hota
+        if (!user || !user.password) {
+          return null;
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
 
         if (!isMatch) {
-          throw new Error("incorrect password");
+          return null;
         }
         return {
           id: user._id.toString(),
@@ -47,10 +54,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async signIn({ user, account }) {
       if (account?.provider == "google") {
         await connectDb();
-        const dbUser = await User.findOne({ email: user.email });
+        let dbUser = await User.findOne({ email: user.email?.toLowerCase() });
         if (!dbUser) {
           //agr user nhi milega to creATE KRENGE ACCOUNT
-          await User.create({
+          dbUser = await User.create({
             name: user.name,
             email: user.email,
             image: user.image,
@@ -61,15 +68,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return true;
     },
-    jwt({ token, user, trigger, session }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
-        ((token.id = user.id),
-          (token.name = user.name),
-          (token.email = user.email),
-          (token.role = user.role));
+        token.id = user.id;
+        token.name = user.name;
+        token.email = user.email;
+        token.role = user.role;
       }
-      if (trigger == "update") {
-        token.role = session.role;
+      // role client se nahi lete, DB se dobara padhte hain
+      if (trigger == "update" && token.id) {
+        await connectDb();
+        const dbUser = await User.findById(token.id).select("role");
+        if (dbUser) {
+          token.role = dbUser.role;
+        }
       }
 
       return token;
@@ -90,7 +102,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   session: {
     strategy: "jwt",
-    maxAge: 10 * 24 * 60 * 60 * 1000,
+    maxAge: 10 * 24 * 60 * 60, // seconds me (10 din)
   },
   secret: process.env.AUTH_SECRET,
 });

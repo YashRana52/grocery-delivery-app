@@ -1,9 +1,9 @@
 "use client";
 
 import { getSocket } from "@/lib/socket";
-import { IUser } from "@/models/user.model";
+import type { IUser } from "@/models/user.model";
 import axios from "axios";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import {
   CreditCard,
   MapPin,
@@ -19,6 +19,7 @@ import {
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 export interface IOrder {
   _id?: string;
@@ -81,16 +82,13 @@ function AdminOrderCard({ order }: { order: IOrder }) {
 
   const updateStatus = async (orderId: string, status: string) => {
     try {
-      const result = await axios.post(
-        `/api/admin/update-order-status/${orderId}`,
-        {
-          status,
-        },
-      );
-      console.log(result.data);
-      setStatus(status!);
-    } catch (error) {
+      await axios.post(`/api/admin/update-order-status/${orderId}`, {
+        status,
+      });
+      setStatus(status);
+    } catch (error: any) {
       console.log(error);
+      toast.error(error.response?.data?.message || "Failed to update status");
     }
   };
 
@@ -102,16 +100,18 @@ function AdminOrderCard({ order }: { order: IOrder }) {
   useEffect(() => {
     const socket = getSocket();
 
-    socket.on("order-status-update", (data) => {
-      if (data.orderId.toString() == order?._id?.toString()) {
+    const handleStatus = (data: { orderId: string; status: string }) => {
+      if (String(data.orderId) == order?._id?.toString()) {
         setStatus(data.status);
       }
-    });
-
-    return () => {
-      socket.off("order-status-update");
     };
-  }, []);
+    socket.on("order-status-update", handleStatus);
+
+    // sirf apna handler hatao, page ke listeners nahi
+    return () => {
+      socket.off("order-status-update", handleStatus);
+    };
+  }, [order?._id]);
 
   return (
     <motion.div
@@ -225,7 +225,7 @@ function AdminOrderCard({ order }: { order: IOrder }) {
                   className="appearance-none bg-slate-800/60 border border-slate-600 hover:border-emerald-500/50 focus:border-emerald-500 rounded-lg pl-3 pr-9 py-1.5 text-sm text-slate-200 outline-none transition-all cursor-pointer"
                   value={status}
                   onChange={(e) =>
-                    updateStatus(order._id?.toString()!, e.target.value)
+                    order._id && updateStatus(order._id.toString(), e.target.value)
                   }
                 >
                   {getAllowedStatuses(status).map((st) => (

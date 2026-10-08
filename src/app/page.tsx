@@ -10,13 +10,18 @@ import User from "@/models/user.model";
 import { redirect } from "next/navigation";
 
 export default async function Home({ searchParams }: any) {
-  await connectDb();
+  // pehle request-time APIs, taaki build ke time page prerender hoke DB hit na kare
   const session = await auth();
   const params = await searchParams;
 
   const search = params.search;
 
-  const user = await User.findById(session?.user?.id);
+  if (!session?.user?.id) {
+    redirect("/login");
+  }
+
+  await connectDb();
+  const user = await User.findById(session.user.id);
 
   if (!user) {
     redirect("/login");

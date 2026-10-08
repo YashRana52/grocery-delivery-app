@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     const unit = formData.get("unit") as string;
     const price = formData.get("price") as string;
 
-    const file = formData.get("image") as Blob | null;
+    const file = formData.get("image");
 
     if (!name || !category || !unit || !price) {
       return NextResponse.json(
@@ -30,19 +30,28 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let imageUrl = "";
+    if (isNaN(Number(price)) || Number(price) <= 0) {
+      return NextResponse.json(
+        { message: "Price must be a positive number" },
+        { status: 400 },
+      );
+    }
 
-    if (file) {
-      const uploaded = await uploadOnCloudinary(file);
+    // schema me image required hai
+    if (!(file instanceof Blob) || file.size === 0) {
+      return NextResponse.json(
+        { message: "Product image is required" },
+        { status: 400 },
+      );
+    }
 
-      if (!uploaded) {
-        return NextResponse.json(
-          { message: "Image upload failed" },
-          { status: 500 },
-        );
-      }
+    const imageUrl = await uploadOnCloudinary(file);
 
-      imageUrl = uploaded;
+    if (!imageUrl) {
+      return NextResponse.json(
+        { message: "Image upload failed" },
+        { status: 500 },
+      );
     }
 
     const grocery = await Grocery.create({

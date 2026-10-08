@@ -45,8 +45,10 @@ function RegisterForm({ setStep }: propType) {
 
       toast.success(res.data.message);
       router.push("/login");
-    } catch (error) {
-      console.log(error);
+    } catch (error: any) {
+      // pura axios error log karne se request body (password) console me aa jata hai
+      console.log("register error:", error.response?.data || error.message);
+      toast.error(error.response?.data?.message || "Registration failed");
     } finally {
       setLoading(false);
     }

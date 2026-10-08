@@ -2,7 +2,7 @@
 
 import AdminOrderCard from "@/components/AdminOrderCard";
 import { getSocket } from "@/lib/socket";
-import { IUser } from "@/models/user.model";
+import type { IUser } from "@/models/user.model";
 
 import axios from "axios";
 import { ArrowLeft, FolderOpenDot } from "lucide-react";
@@ -67,31 +67,45 @@ const ManageOrders = () => {
     getOrders();
   }, []);
 
-  useEffect((): any => {
+  useEffect(() => {
     const socket = getSocket();
-    socket.on("new-order", (newOrder) => {
-      setOrders((prev) => [newOrder, ...prev]);
-    });
-    socket.on("order-assigned", ({ orderId, assignedDeliveryBoy }) => {
+    const handleNewOrder = (newOrder: IOrder) => {
+      setOrders((prev) =>
+        prev.some((o) => o._id?.toString() === newOrder._id?.toString())
+          ? prev
+          : [newOrder, ...prev],
+      );
+    };
+    const handleAssigned = ({
+      orderId,
+      assignedDeliveryBoy,
+    }: {
+      orderId: string;
+      assignedDeliveryBoy: IUser;
+    }) => {
       setOrders((prev) =>
         prev.map((o) =>
           o._id?.toString() === orderId ? { ...o, assignedDeliveryBoy } : o,
         ),
       );
-    });
-    socket.on("order-status-update", (data) => {
+    };
+    const handleStatus = (data: { orderId: string; status: IOrder["status"] }) => {
       setOrders((prev) =>
         prev.map((o) =>
-          o._id?.toString() === data.orderId
+          o._id?.toString() === String(data.orderId)
             ? { ...o, status: data.status }
             : o,
         ),
       );
-    });
+    };
+    socket.on("new-order", handleNewOrder);
+    socket.on("order-assigned", handleAssigned);
+    socket.on("order-status-update", handleStatus);
+    // handler pass karo, warna AdminOrderCard ke listener bhi hat jate hain
     return () => {
-      socket.off("new-order");
-      socket.off("order-assigned");
-      socket.off("order-status-update");
+      socket.off("new-order", handleNewOrder);
+      socket.off("order-assigned", handleAssigned);
+      socket.off("order-status-update", handleStatus);
     };
   }, []);
 

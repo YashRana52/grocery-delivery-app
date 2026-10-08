@@ -29,24 +29,33 @@ function DeliveryChat({ orderId, deliveryBoyId }: Props) {
   const [newMessage, setNewMessage] = useState("");
   const [messages, setMessages] = useState<IMessage[]>([]);
   const [showEmoji, setShowEmoji] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const bottomRef = useRef<HTMLDivElement | null>(null);
   const emojiRef = useRef<HTMLDivElement | null>(null);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
 
   //  JOIN ROOM + RECEIVE MESSAGE
   useEffect(() => {
     const socket = getSocket();
 
-    socket.emit("join-room", orderId);
+    if (!orderId) return;
 
-    socket.on("receive-message", (msg: IMessage) => {
+    const joinRoom = () => socket.emit("join-room", orderId);
+    joinRoom();
+    // reconnect ke baad room dobara join karna padta hai
+    socket.on("connect", joinRoom);
+
+    const handleMessage = (msg: IMessage) => {
+      // pehle wale order ke room ke messages ignore karo
+      if (msg.roomId !== orderId) return;
       setMessages((prev) => [...prev, msg]);
-    });
+    };
+    socket.on("receive-message", handleMessage);
 
     return () => {
-      socket.off("receive-message");
+      socket.off("connect", joinRoom);
+      socket.off("receive-message", handleMessage);
     };
   }, [orderId]);
 
@@ -67,7 +76,13 @@ function DeliveryChat({ orderId, deliveryBoyId }: Props) {
   }, [orderId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = messagesRef.current;
+    if (!el) return;
+
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages]);
 
   //  CLOSE EMOJI ON OUTSIDE CLICK
@@ -119,9 +134,7 @@ function DeliveryChat({ orderId, deliveryBoyId }: Props) {
         role: "delivery_boy",
       });
       setLoading(false);
-      setSuggestions(res.data.suggestions);
-
-      console.log("suggestions:", suggestions);
+      setSuggestions(res.data.suggestions || []);
     } catch (error) {
       console.log(error);
       setLoading(false);
@@ -176,7 +189,10 @@ function DeliveryChat({ orderId, deliveryBoyId }: Props) {
       </div>
 
       {/* MESSAGES */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+      <div
+        ref={messagesRef}
+        className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar"
+      >
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-4">
             <div className="text-5xl mb-3">💬</div>
@@ -226,7 +242,7 @@ function DeliveryChat({ orderId, deliveryBoyId }: Props) {
           </AnimatePresence>
         )}
 
-        <div ref={bottomRef} />
+        <div />
       </div>
 
       {/* INPUT */}

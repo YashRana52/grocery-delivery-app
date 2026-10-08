@@ -17,8 +17,11 @@ import { getSocket } from "@/lib/socket";
 import { toast } from "sonner";
 import { useSelector } from "react-redux";
 import { RootState } from "@/redux/store";
-import Livemap from "./Livemap";
 import DeliveryChat from "./DeliveryChat";
+import dynamic from "next/dynamic";
+
+// leaflet server pe import nahi ho sakta (window chahiye)
+const Livemap = dynamic(() => import("./Livemap"), { ssr: false });
 import { Loader, MapPin, Package, Phone } from "lucide-react";
 
 interface ILocation {
@@ -65,17 +68,23 @@ function DeliveryBoyDashboard({
     latitude: 0,
     longitude: 0,
   });
-  const [deliveryBoyLocation, setDeliveryBoyLocation] = useState<ILocation>({
-    latitude: 0,
-    longitude: 0,
-  });
+  // GPS milne tak null, warna map (0,0) pe marker dikhata hai
+  const [deliveryBoyLocation, setDeliveryBoyLocation] =
+    useState<ILocation | null>(null);
 
-  useEffect((): any => {
+  useEffect(() => {
     const socket = getSocket();
-    socket.on("new-assignment", (deliveryAssignment) => {
-      setAssignments((prev) => [...prev, deliveryAssignment]);
-    });
-    return () => socket.off("new-assignment");
+    const handleNewAssignment = (deliveryAssignment: any) => {
+      setAssignments((prev) =>
+        prev.some((a) => String(a._id) === String(deliveryAssignment._id))
+          ? prev
+          : [...prev, deliveryAssignment],
+      );
+    };
+    socket.on("new-assignment", handleNewAssignment);
+    return () => {
+      socket.off("new-assignment", handleNewAssignment);
+    };
   }, []);
 
   const handleAccept = async (id: string) => {
@@ -98,8 +107,11 @@ function DeliveryBoyDashboard({
       }
 
       setAssignments([]);
-    } catch (error) {
+    } catch (error: any) {
       console.log(error);
+      toast.error(error.response?.data?.message || "Failed to accept order");
+      // expire ho chuka assignment list se hata do
+      setAssignments((prev) => prev.filter((a) => String(a._id) !== id));
     } finally {
       setLoading(false);
     }
@@ -109,8 +121,7 @@ function DeliveryBoyDashboard({
   const fetchAssignments = async () => {
     try {
       const result = await axios.get("/api/delivery/get-assignments");
-      setAssignments([...result.data.assignments].reverse());
-      console.log(result);
+      setAssignments([...(result.data.assignments || [])].reverse());
     } catch (error) {
       console.log(error);
     }
@@ -133,8 +144,8 @@ function DeliveryBoyDashboard({
     }
   };
 
+  // sirf apne map ke liye; server ko location GeoUpdater bhejta hai
   useEffect(() => {
-    const socket = getSocket();
     if (!userData?.user._id) return;
     if (!navigator.geolocation) return;
     let lastUpdate = 0;
@@ -142,22 +153,13 @@ function DeliveryBoyDashboard({
       (pos) => {
         const now = Date.now();
 
-        if (now - lastUpdate < 3000) return; // 2 seconds
+        if (now - lastUpdate < 3000) return; // 3 seconds
 
         lastUpdate = now;
 
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-
         setDeliveryBoyLocation({
-          latitude: lat,
-          longitude: lon,
-        });
-
-        socket.emit("update-location", {
-          userId: userData.user._id,
-          latitude: lat,
-          longitude: lon,
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
         });
       },
       (err) => {
@@ -185,12 +187,14 @@ function DeliveryBoyDashboard({
       const res = await axios.post("/api/delivery/otp/send", {
         orderId: activeOrder.order._id,
       });
-      console.log(res.data);
       setShowOtpBox(true);
+      setOtp("");
+      setOtpError("");
       setSendOtpLoading(false);
       toast.success(res.data.message || res.data);
-    } catch (error) {
+    } catch (error: any) {
       console.log(error);
+      toast.error(error.response?.data?.message || "Failed to send OTP");
       setSendOtpLoading(false);
     }
   };
@@ -204,6 +208,10 @@ function DeliveryBoyDashboard({
         otp,
       });
       setActiveOrder(null);
+      // agle order ke liye OTP state reset
+      setShowOtpBox(false);
+      setOtp("");
+      setOtpError("");
       setverifyOtpLoading(false);
       toast.success(res.data.message || res.data);
       await fetchCurrentOrder();
@@ -247,7 +255,7 @@ function DeliveryBoyDashboard({
           </div>
           <DeliveryChat
             orderId={activeOrder?.order?._id?.toString()}
-            deliveryBoyId={userData?.user?._id?.toString()!}
+            deliveryBoyId={userData?.user?._id?.toString() || ""}
           />
           <div className="mt-6 border border-white/10 bg-white/5 backdrop-blur-md rounded-2xl p-6 shadow-lg">
             {/*  Delivered State */}
@@ -267,6 +275,7 @@ function DeliveryBoyDashboard({
             {!activeOrder.order.deliveryOtpVerification && !showOtpBox && (
               <button
                 onClick={sendOtp}
+                disabled={sendOtpLoading}
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-medium hover:opacity-90 transition flex items-center justify-center gap-2"
               >
                 {sendOtpLoading ? <Loader size={16} /> : "Mark as Delivered"}
@@ -328,6 +337,7 @@ function DeliveryBoyDashboard({
                 {/* VERIFY BUTTON */}
                 <button
                   onClick={verifyOtp}
+                  disabled={verifyOtpLoading || otp.length !== 4}
                   className="w-full py-3 rounded-xl bg-green-500 text-white font-medium hover:bg-green-600 transition flex items-center justify-center gap-2"
                 >
                   {verifyOtpLoading ? <Loader size={16} /> : "Verify OTP"}
@@ -739,7 +749,7 @@ function DeliveryBoyDashboard({
             {/* Buttons */}
             <div className="flex gap-3">
               <button
-                onClick={() => handleAccept(a?._id!)}
+                onClick={() => handleAccept(String(a._id))}
                 disabled={loading}
                 className="flex-1 py-2 rounded-lg
   bg-emerald-600 hover:bg-emerald-500

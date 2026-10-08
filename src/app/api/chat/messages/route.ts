@@ -1,16 +1,27 @@
+import { auth } from "@/auth";
 import connectDb from "@/lib/db";
+import { canAccessOrder } from "@/lib/orderAccess";
 
 import Message from "@/models/message.model";
 import Order from "@/models/order.model";
+import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-  await connectDb();
   try {
+    await connectDb();
+
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
     const { roomId } = await req.json();
 
-    const room = await Order.findById(roomId);
-    if (!room) {
+    const room = mongoose.Types.ObjectId.isValid(roomId)
+      ? await Order.findById(roomId)
+      : null;
+    if (!room || !canAccessOrder(session, room)) {
       return NextResponse.json(
         {
           message: `room not found`,

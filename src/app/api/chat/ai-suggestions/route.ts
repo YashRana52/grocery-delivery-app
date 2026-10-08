@@ -1,11 +1,18 @@
-import connectDb from "@/lib/db";
+import { auth } from "@/auth";
 
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-  await connectDb();
   try {
-    const { message, role } = await req.json();
+    // bina login ke koi bhi gemini API ka quota khatam na kar de
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await req.json();
+    const role = body.role === "delivery_boy" ? "delivery_boy" : "user";
+    const message = String(body.message || "No message yet").slice(0, 500);
     const prompt = `You are a professional delivery assistant chatbot.
 
 Your task:

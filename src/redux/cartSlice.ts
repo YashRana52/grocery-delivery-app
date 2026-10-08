@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
-import mongoose from "mongoose";
+import { getDeliveryFee } from "@/lib/pricing";
 
 interface IGrocery {
   _id: string;
@@ -24,8 +24,8 @@ interface ICartSlice {
 const initialState: ICartSlice = {
   cartData: [],
   subTotal: 0,
-  deliveryFee: 40,
-  finalTotal: 40,
+  deliveryFee: 0,
+  finalTotal: 0,
 };
 
 const cartSlice = createSlice({
@@ -33,7 +33,12 @@ const cartSlice = createSlice({
   initialState,
   reducers: {
     addToCart: (state, action: PayloadAction<IGrocery>) => {
-      state.cartData?.push(action.payload);
+      const existing = state.cartData.find((i) => i._id == action.payload._id);
+      if (existing) {
+        existing.quantity += action.payload.quantity;
+      } else {
+        state.cartData.push(action.payload);
+      }
       cartSlice.caseReducers.calculateTotals(state);
     },
     increaseQuantity: (state, action: PayloadAction<string>) => {
@@ -62,23 +67,14 @@ const cartSlice = createSlice({
         0,
       );
 
-      // delivery logic
-      if (state.subTotal === 0) {
-        state.deliveryFee = 0;
-      } else if (state.subTotal < 200) {
-        state.deliveryFee = 40;
-      } else if (state.subTotal < 400) {
-        state.deliveryFee = 25;
-      } else if (state.subTotal < 500) {
-        state.deliveryFee = 10;
-      } else {
-        state.deliveryFee = 0;
-      }
+      // delivery logic (server bhi yahi function use karta hai)
+      state.deliveryFee = getDeliveryFee(state.subTotal);
 
       state.finalTotal = state.subTotal + state.deliveryFee;
     },
     clearCart: (state) => {
       state.cartData = [];
+      cartSlice.caseReducers.calculateTotals(state);
     },
   },
 });

@@ -11,7 +11,7 @@ import {
   useMapEvents,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { useEffect, useMemo } from "react";
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -103,17 +103,22 @@ export default function Livemap({
   deliveryBoyLocation,
   className = "",
 }: IProps) {
-  const userPos: LatLngTuple = [userLocation.latitude, userLocation.longitude];
+  const userLat = userLocation.latitude;
+  const userLng = userLocation.longitude;
+  const boyLat = deliveryBoyLocation?.latitude;
+  const boyLng = deliveryBoyLocation?.longitude;
 
-  const boyPos = deliveryBoyLocation
-    ? [deliveryBoyLocation.latitude, deliveryBoyLocation.longitude]
-    : null;
+  const userPos: LatLngTuple = [userLat, userLng];
+
+  const boyPos: LatLngTuple | null =
+    boyLat !== undefined && boyLng !== undefined ? [boyLat, boyLng] : null;
 
   // Better center: middle between user & delivery boy (when both exist)
+  // deps primitive hain, warna har render pe naya array banke map flyTo karta rehta
   const mapCenter = useMemo<LatLngExpression>(() => {
-    if (!boyPos) return userPos;
-    return [(userPos[0] + boyPos[0]) / 2, (userPos[1] + boyPos[1]) / 2];
-  }, [userPos, boyPos]);
+    if (boyLat === undefined || boyLng === undefined) return [userLat, userLng];
+    return [(userLat + boyLat) / 2, (userLng + boyLng) / 2];
+  }, [userLat, userLng, boyLat, boyLng]);
 
   const positions: LatLngTuple[] = boyPos
     ? [userPos as LatLngTuple, boyPos as LatLngTuple]

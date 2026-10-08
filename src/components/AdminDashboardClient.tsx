@@ -49,10 +49,10 @@ function AdminDashboardClient({ earning, stats, chartData }: PropType) {
         : "Total Earnings";
 
   const icons = [
-    <Package className="text-emerald-400 w-7 h-7" />,
-    <Users className="text-cyan-400 w-7 h-7" />,
-    <Truck className="text-amber-400 w-7 h-7" />,
-    <IndianRupee className="text-violet-400 w-7 h-7" />,
+    <Package key="orders" className="text-emerald-400 w-7 h-7" />,
+    <Users key="customers" className="text-cyan-400 w-7 h-7" />,
+    <Truck key="pending" className="text-amber-400 w-7 h-7" />,
+    <IndianRupee key="revenue" className="text-violet-400 w-7 h-7" />,
   ];
 
   return (

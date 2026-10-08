@@ -39,7 +39,9 @@ export interface IOrder {
   deliveryOtp: string | null;
   otpExpires: Date | null;
   deliveryOtpVerification: boolean;
+  otpAttempts: number;
   deliveredAt: Date;
+  stripeSessionId?: string;
 }
 
 const orderSchema = new mongoose.Schema<IOrder>(
@@ -120,8 +122,18 @@ const orderSchema = new mongoose.Schema<IOrder>(
       type: Boolean,
       default: false,
     },
+    otpAttempts: {
+      type: Number,
+      default: 0,
+    },
     deliveredAt: {
       type: Date,
+    },
+    // stripe webhook retry pe duplicate order na bane
+    stripeSessionId: {
+      type: String,
+      unique: true,
+      sparse: true,
     },
   },
   { timestamps: true },

@@ -15,6 +15,7 @@ async function DeliveryBoy() {
 
   const last7Days = new Date();
   last7Days.setDate(last7Days.getDate() - 6); // including today
+  last7Days.setHours(0, 0, 0, 0); // chart ke 7 din se match kare
 
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 

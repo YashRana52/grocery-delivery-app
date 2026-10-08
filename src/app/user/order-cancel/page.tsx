@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { XCircle } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 
 function OrderCancel() {
   const router = useRouter();

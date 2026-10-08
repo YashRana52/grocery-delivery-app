@@ -2,7 +2,7 @@
 
 import { Eye, EyeOff, Leaf, Loader2, Lock, Mail } from "lucide-react";
 import { motion } from "motion/react";
-import { signIn, useSession } from "next-auth/react";
+import { signIn } from "next-auth/react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
@@ -15,7 +15,6 @@ function Login() {
   const [loading, setLoading] = useState(false);
 
   const router = useRouter();
-  const session = useSession();
 
   const formValid = email && password;
 
@@ -23,15 +22,23 @@ function Login() {
     e.preventDefault();
     try {
       setLoading(true);
-      await signIn("credentials", {
+      const res = await signIn("credentials", {
         email,
         password,
+        redirect: false,
       });
-      router.push("/");
 
-      setLoading(false);
+      if (!res || res.error) {
+        toast.error("Invalid email or password");
+        return;
+      }
+
+      router.push("/");
+      router.refresh();
     } catch (error) {
       console.log(error);
+      toast.error("Login failed, please try again");
+    } finally {
       setLoading(false);
     }
   };

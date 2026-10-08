@@ -9,10 +9,13 @@ import Footer from "./Footer";
 async function UserDashboard({ search }: { search?: string }) {
   await connectDb();
 
+  // user input ko regex me direct dalne se "(" jaise char pe page crash hota tha
+  const safeSearch = search?.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
   const groceries = await Grocery.find(
-    search
+    safeSearch
       ? {
-          name: { $regex: search, $options: "i" },
+          name: { $regex: safeSearch, $options: "i" },
         }
       : {},
   );
@@ -40,7 +43,7 @@ async function UserDashboard({ search }: { search?: string }) {
             {search && (
               <p className="text-gray-400">
                 No results found for{" "}
-                <span className="text-green-400 font-medium">"{search}"</span>
+                <span className="text-green-400 font-medium">&quot;{search}&quot;</span>
               </p>
             )}
 
@@ -50,8 +53,8 @@ async function UserDashboard({ search }: { search?: string }) {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5 mb-8">
-            {plainGrocery.map((item: any, index: number) => (
-              <GroceryitemCard item={item} key={index} />
+            {plainGrocery.map((item: any) => (
+              <GroceryitemCard item={item} key={item._id} />
             ))}
           </div>
         )}

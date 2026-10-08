@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     const { userId, socketId } = await req.json();
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return NextResponse.json({ message: "Invalid userId" });
+      return NextResponse.json({ message: "Invalid userId" }, { status: 400 });
     }
 
     const user = await User.findByIdAndUpdate(
@@ -22,10 +22,8 @@ export async function POST(req: NextRequest) {
       { new: true },
     );
 
-    console.log("Updated User:", user);
-
     if (!user) {
-      return NextResponse.json({ message: "user not found" });
+      return NextResponse.json({ message: "user not found" }, { status: 404 });
     }
 
     return NextResponse.json({ success: true });

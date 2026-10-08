@@ -11,13 +11,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import axios from "axios";
 import Image from "next/image";
 
 import { getSocket } from "@/lib/socket";
 
-import { IUser } from "@/models/user.model";
+import type { IUser } from "@/models/user.model";
 import { useRouter } from "next/navigation";
 
 type OrderStatus = "pending" | "out of delivery" | "delivered";
@@ -86,16 +86,26 @@ function MyOrders() {
     getMyOrders();
   }, []);
 
-  useEffect((): any => {
+  useEffect(() => {
     const socket = getSocket();
-    socket.on("order-assigned", ({ orderId, assignedDeliveryBoy }) => {
+    const handleAssigned = ({
+      orderId,
+      assignedDeliveryBoy,
+    }: {
+      orderId: string;
+      assignedDeliveryBoy: IUser;
+    }) => {
       setOrders((prev) =>
         prev.map((o) =>
           o._id?.toString() === orderId ? { ...o, assignedDeliveryBoy } : o,
         ),
       );
-    });
-    return () => socket.off("order-assigned");
+    };
+    socket.on("order-assigned", handleAssigned);
+    // handler pass karo, warna dusre components ke listener bhi hat jate hain
+    return () => {
+      socket.off("order-assigned", handleAssigned);
+    };
   }, []);
 
   const getStatusConfig = (status: string) => {

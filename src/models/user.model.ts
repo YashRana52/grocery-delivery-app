@@ -13,7 +13,7 @@ export interface IUser {
     coordinates: [number, number]; // [longitude, latitude]
   };
   socketId: string | null;
-  isOnline: Boolean;
+  isOnline: boolean;
 }
 
 const userSchema = new mongoose.Schema<IUser>(
