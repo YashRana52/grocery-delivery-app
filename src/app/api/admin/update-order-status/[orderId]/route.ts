@@ -49,7 +49,18 @@ export async function POST(
     if (status === "out of delivery" && !order.assignment) {
       const { latitude, longitude } = order.address;
 
-      //  find nearby delivery boys
+      //  busy boys (jinke paas already order hai) ko hata do
+      const filterAvailable = async (boys: any[]) => {
+        const busyIds = await DeliveryAssignment.find({
+          assignedTo: { $in: boys.map((b) => b._id) },
+          status: { $nin: ["broadcasted", "completed"] },
+        }).distinct("assignedTo");
+
+        const busyIdSet = new Set(busyIds.map((b) => String(b)));
+        return boys.filter((b) => !busyIdSet.has(String(b._id)));
+      };
+
+      //  pehle nearby (10 km) delivery boys dhundo
       const nearByDeliveryBoys = await User.find({
         role: "deliveryBoy",
         location: {
@@ -63,20 +74,14 @@ export async function POST(
         },
       });
 
-      const nearByIds = nearByDeliveryBoys.map((b) => b._id);
+      let availableDeliveryBoys = await filterAvailable(nearByDeliveryBoys);
 
-      //  find busy delivery boys
-      const busyIds = await DeliveryAssignment.find({
-        assignedTo: { $in: nearByIds },
-        status: { $nin: ["broadcasted", "completed"] },
-      }).distinct("assignedTo");
-
-      const busyIdSet = new Set(busyIds.map((b) => String(b)));
-
-      //  filter available boys
-      const availableDeliveryBoys = nearByDeliveryBoys.filter(
-        (b) => !busyIdSet.has(String(b._id)),
-      );
+      // abhi ke liye range zaruri nahi: nearby koi free nahi mila to
+      // sabhi delivery boys ko request bhej do, chahe kitne bhi door ho
+      if (availableDeliveryBoys.length === 0) {
+        const allDeliveryBoys = await User.find({ role: "deliveryBoy" });
+        availableDeliveryBoys = await filterAvailable(allDeliveryBoys);
+      }
 
       const candidates = availableDeliveryBoys.map((b) => b._id);
 
@@ -84,7 +89,7 @@ export async function POST(
       // warna wo "out of delivery" me bina rider ke atak jayega
       if (candidates.length === 0) {
         return NextResponse.json(
-          { success: false, message: "No available delivery boys nearby" },
+          { success: false, message: "No available delivery boys" },
           { status: 409 },
         );
       }
@@ -119,8 +124,8 @@ export async function POST(
         id: b._id,
         name: b.name,
         mobile: b.mobile,
-        latitude: b.location.coordinates[1],
-        longitude: b.location.coordinates[0],
+        latitude: b.location?.coordinates?.[1] ?? null,
+        longitude: b.location?.coordinates?.[0] ?? null,
       }));
     }
 
